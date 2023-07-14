@@ -1,0 +1,35 @@
+[FORMAT]
+# String used as indentation unit. This is usually "    " (4 spaces) or "\t" (1
+# tab).
+indent-string='  '
+
+# Maximum number of characters on a single line.
+max-line-length=125
+
+[MESSAGES CONTROL]
+# Enable the message, report, category or checker with the given id(s). You can
+# either give multiple identifier separated by comma (,) or put this option
+# multiple time.
+#enable=
+
+# Disable the message, report, category or checker with the given id(s). You
+# can either give multiple identifier separated by comma (,) or put this option
+# multiple time (only on the command line, not in the configuration file where
+# it should appear only once).
+
+# Diagrams framework requires ignoring expression-not-assigned and pointless-statement
+disable=broad-except,raise-missing-from,fixme,expression-not-assigned,pointless-statement,R0904
+
+[DESIGN]
+
+# Maximum number of locals for function / method body.
+max-locals=20
+
+# Maximum number of arguments for function / method.
+max-args=8
+
+# Maximum number of branch for function / method body.
+max-branches=20
+
+# Minimum number of public methods for a class (see R0903).
+min-public-methods=1
