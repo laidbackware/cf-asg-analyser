@@ -26,3 +26,13 @@ Written file: /home/user/cf-asg-munger/output.json
 ```
 
 A file called output.json will be created in the script directory.
+
+## Build with older Python version
+Export Docker hub tag for python version `export PYTHON_VERSION=3.7.3-stretch`.
+
+```
+docker run -v .:/work python:3.7.3-stretch sh -c \
+  'pip install urllib3==1.26.16 cloudfoundry-client pyinstaller &&
+  cd /work &&
+  pyinstaller cf_asg_extractor.spec'
+```

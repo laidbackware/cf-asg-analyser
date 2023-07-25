@@ -3,10 +3,18 @@ import getpass, json, os, sys
 from hashlib import md5
 from cloudfoundry_client.client import CloudFoundryClient
 import requests
-from urllib3.exceptions import InsecureRequestWarning
 
-# Suppress the warnings from urllib3
-requests.packages.urllib3.disable_warnings(category=InsecureRequestWarning)
+# v2 features
+# extract org list
+# extract default asg under dedicated section
+
+try:
+  from urllib3.exceptions import InsecureRequestWarning
+
+  # Suppress the warnings from urllib3
+  requests.packages.urllib3.disable_warnings(category=InsecureRequestWarning)
+except Exception as e:
+  pass
 
 if os.environ.get('CF_ENDPOINT') is None:
   print("You must export the CF API endpoint as CF_ENDPOINT", file=sys.stderr)
