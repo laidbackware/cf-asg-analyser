@@ -72,6 +72,32 @@
   {
     "asg_name": "sg3",
     "spaces": [
+      "o1_s3"
+    ],
+    "rules": [
+      {
+        "description": "Allow http and https traffic from ZoneA",
+        "ports": "80",
+        "protocol": "tcp",
+        "destination": "3627b078935fd27c44668c381e9abfa1"
+      },
+      {
+        "description": "Allow http and https traffic from ZoneA",
+        "ports": "443",
+        "protocol": "tcp",
+        "destination": "3627b078935fd27c44668c381e9abfa1"
+      },
+      {
+        "description": "Allow http and https traffic from ZoneA",
+        "ports": "443",
+        "protocol": "tcp",
+        "destination": "ca853eeb9bb4305979b9c2a58ba16ab8"
+      }
+    ]
+  },
+  {
+    "asg_name": "sg4",
+    "spaces": [
       "o2_s1"
     ],
     "rules": [
@@ -98,6 +124,29 @@
         "ports": "",
         "protocol": "all",
         "destination": "5e59e1240c78894d036cb403fa4e8012"
+      }
+    ]
+  },
+  {
+    "asg_name": "sg5",
+    "spaces": [
+      "o3_s1",
+      "o3_s2",
+      "o3_s3",
+      "o4_s4"
+    ],
+    "rules": [
+      {
+        "description": "Allow http and https traffic from ZoneA",
+        "ports": "80",
+        "protocol": "tcp",
+        "destination": "3627b078935fd27c44668c381e9abfa2"
+      },
+      {
+        "description": "Allow http and https traffic from ZoneA",
+        "ports": "443",
+        "protocol": "tcp",
+        "destination": "3627b078935fd27c44668c381e9abfa2"
       }
     ]
   }
