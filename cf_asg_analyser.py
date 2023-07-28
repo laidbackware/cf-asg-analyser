@@ -22,16 +22,18 @@ def main(file_name):
 
   print(f"Processed {len(asg_data)} ASGs")
   print(f"Processed {rules_processed} rules")
-  print(f"Number of rules covered by defaults: {len(covered_by_defaults)}")
+  print(f"Number of rules covered by default ASG: {len(covered_by_defaults)}")
   print(f"Number of rules that could be covered by common org ASG: {org_common_saving}")
 
 def look_for_common_org_rules(org_data):
   org_common_saving = 0
 
-  for _, org_details in org_data.items():
-    for _, rule_spaces in org_details["rules"].items():
-      if org_details["space_count"] > 1 and len(rule_spaces) == org_details["space_count"]:
-        org_common_saving += org_details["space_count"]-1
+  for org_name, org_details in org_data.items():
+    if org_details["space_count"] < 2 or org_details["asgs"] < 2:
+      continue
+    for rule_details, rule_spaces in org_details["rules"].items():
+      if len(rule_spaces) == org_details["space_count"]:
+        org_common_saving += org_details["space_count"] - 1
 
   return org_common_saving
 
@@ -41,32 +43,40 @@ def iterate_dict_value(lookup_dict, key):
     return
   lookup_dict[key] = lookup_dict[key] + 1
 
-def extract_org_space_numbers(asg_data):
+def extract_org_data(asg_data):
   '''Returns a dict, with org name as key and space_count/spaces as subkeys '''
-  org_space_numbers = {}
+  org_data = {}
   for asg in asg_data:
+    added_orgs = set()
     for org_space_joined in asg["spaces"]:
       org_name, space_name = org_space_joined.split("_")[0], org_space_joined.split("_")[1]
-      if not org_name in org_space_numbers:
-        org_space_numbers[org_name] = {
+      if not org_name in org_data:
+        org_data[org_name] = {
           "space_count": 1,
           "spaces": {space_name},
-          "rules": {}
+          "rules": {},
+          "asgs": 0
         }
-        continue
-      if not space_name in org_space_numbers[org_name]["spaces"]:
-        org_space_numbers[org_name]["space_count"] = org_space_numbers[org_name]["space_count"] + 1
-        org_space_numbers[org_name]["spaces"].add(space_name)
-  return org_space_numbers
+      elif not space_name in org_data[org_name]["spaces"]:
+          org_data[org_name]["space_count"] = org_data[org_name]["space_count"] + 1
+          org_data[org_name]["spaces"].add(space_name)
+      
+      added_orgs.add(org_name)
+  
+    for added_org_name in added_orgs:
+      org_data[added_org_name]["asgs"] += 1
+  return org_data
 
 def assign_rule_org_mapping(org_data, asg, rule_string):
+  
   for org_space_name  in asg["spaces"]:
     org_name, space_name = org_space_name.split("_")[0], org_space_name.split("_")[1]
 
     if rule_string not in  org_data[org_name]["rules"]:
       org_data[org_name]["rules"][rule_string] = {space_name}
-      continue
-    org_data[org_name]["rules"][rule_string].add(space_name)
+    else:
+      org_data[org_name]["rules"][rule_string].add(space_name)
+
 
 def parse_asgs(asg_data):
   # Tests
@@ -79,7 +89,7 @@ def parse_asgs(asg_data):
   # [ ] asg is applied to to many spaces for NSX-T
 
   default_rules = get_rule_string_list(asg_data[0]["rules"])
-  org_data = extract_org_space_numbers(asg_data)
+  org_data = extract_org_data(asg_data)
   covered_by_defaults = []
 
   for asg in asg_data:

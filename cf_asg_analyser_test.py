@@ -33,22 +33,17 @@ def test_parse_args():
 
   assert len(covered_by_defaults) == 1, "Detected too many rules covered by default"
 
-def test_extract_org_space_numbers():
-  resp = cfa.extract_org_space_numbers(asg_data)
+def test_extract_org_data():
+  org_data = cfa.extract_org_data(asg_data)
 
-  assert "o1" in resp
-
-# def test_extract_org_space_dict():
-#    resp = cfa.extract_org_space_dict(asg_data[5])
-#    assert len(resp) == 2
-#    assert type(resp["o3"]) == list and len(resp["o3"]) == 3
-#    assert resp["o4"] == ["s4"]
+  assert "o1" in org_data
+  assert org_data["o1"]["asgs"] == 3
 
 def test_assign_rule_org_mapping():
   rule_string = "destination_protocol_ports"
   org_data = {
-    "o3": {"rules": {}},
-    "o4": {"rules": {}}
+    "o3": {"rules": {}, "asgs": 0},
+    "o4": {"rules": {}, "asgs": 0}
   }
   cfa.assign_rule_org_mapping(org_data, asg_data[5], f"{rule_string}_1")
   cfa.assign_rule_org_mapping(org_data, asg_data[5], f"{rule_string}_2")
@@ -58,4 +53,4 @@ def test_assign_rule_org_mapping():
 def test_look_for_common_org_rules():
   _, org_data = cfa.parse_asgs(asg_data)
   org_common_saving = cfa.look_for_common_org_rules(org_data)
-  assert org_common_saving == 8
+  assert org_common_saving == 4
