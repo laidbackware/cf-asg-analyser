@@ -1,5 +1,5 @@
 '''Looks for ASG optimisations'''
-import json, sys
+import copy, json, sys
 
 def get_rule_string_list(rules):
   rule_list = []
@@ -14,28 +14,44 @@ def main(file_name):
 
   covered_by_defaults, org_data = parse_asgs(asg_data)
 
-  org_common_saving = look_for_common_org_rules(org_data)
+  org_common_saving, mod_org_data = look_for_common_org_rules(org_data)
 
   rules_processed = 0
   for asg in asg_data:
     rules_processed += len(asg["rules"])
 
+  common_asg_count = 0
+  common_rule_count = 0
+  for org_data in mod_org_data.values():
+    if org_data["common_rules"]:
+      common_asg_count += 1
+      common_rule_count += len(org_data["common_rules"])
+
   print(f"Processed {len(asg_data)} ASGs")
   print(f"Processed {rules_processed} rules")
   print(f"Number of rules covered by default ASG: {len(covered_by_defaults)}")
   print(f"Number of rules that could be covered by common org ASG: {org_common_saving}")
+  print(f"Number of common ASGs to be created: {common_asg_count}")
+  print(f"Number of common rules within common ASGs to be created: {common_rule_count}")
 
 def look_for_common_org_rules(org_data):
   org_common_saving = 0
+  # copy dict to return full modified copy
+  mod_org_data = copy.deepcopy(org_data)
 
-  for org_name, org_details in org_data.items():
-    if org_details["space_count"] < 2 or org_details["asgs"] < 2:
+  # convert dict to list of keys to allow modification within the loop
+  for org_name in list(org_data):
+    if mod_org_data[org_name]["space_count"] < 2 or mod_org_data[org_name]["asgs"] < 2:
       continue
-    for rule_details, rule_spaces in org_details["rules"].items():
-      if len(rule_spaces) == org_details["space_count"]:
-        org_common_saving += org_details["space_count"] - 1
+    for rule_key in list(mod_org_data[org_name]["rules"]):
+      if len(mod_org_data[org_name]["rules"][rule_key]) == mod_org_data[org_name]["space_count"]:
+        mod_org_data[org_name]["org_common_saving"] += mod_org_data[org_name]["space_count"] - 1
+        org_common_saving += mod_org_data[org_name]["space_count"] - 1
+        del mod_org_data[org_name]["rules"][rule_key]
+        mod_org_data[org_name]["common_rules"].add(rule_key)
 
-  return org_common_saving
+  return org_common_saving, mod_org_data
+
 
 def iterate_dict_value(lookup_dict, key):
   if not key in lookup_dict:
@@ -49,13 +65,15 @@ def extract_org_data(asg_data):
   for asg in asg_data:
     added_orgs = set()
     for org_space_joined in asg["spaces"]:
-      org_name, space_name = org_space_joined.split("_")[0], org_space_joined.split("_")[1]
+      org_name, space_name = org_space_joined.split("_")[0], "_".join(org_space_joined.split("_")[1:])
       if not org_name in org_data:
         org_data[org_name] = {
           "space_count": 1,
+          "org_common_saving": 0,
+          "asgs": 0,
           "spaces": {space_name},
           "rules": {},
-          "asgs": 0
+          "common_rules": set()
         }
       elif not space_name in org_data[org_name]["spaces"]:
           org_data[org_name]["space_count"] = org_data[org_name]["space_count"] + 1
@@ -70,7 +88,7 @@ def extract_org_data(asg_data):
 def assign_rule_org_mapping(org_data, asg, rule_string):
   
   for org_space_name  in asg["spaces"]:
-    org_name, space_name = org_space_name.split("_")[0], org_space_name.split("_")[1]
+    org_name, space_name = org_space_name.split("_")[0], "_".join(org_space_name.split("_")[1:])
 
     if rule_string not in  org_data[org_name]["rules"]:
       org_data[org_name]["rules"][rule_string] = {space_name}

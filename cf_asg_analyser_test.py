@@ -52,5 +52,5 @@ def test_assign_rule_org_mapping():
 
 def test_look_for_common_org_rules():
   _, org_data = cfa.parse_asgs(asg_data)
-  org_common_saving = cfa.look_for_common_org_rules(org_data)
+  org_common_saving, mod_org_data = cfa.look_for_common_org_rules(org_data)
   assert org_common_saving == 4

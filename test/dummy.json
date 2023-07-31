@@ -11,8 +11,8 @@
       },
       {
         "description": "",
-        "ports": "",
-        "protocol": "all",
+        "ports": "443",
+        "protocol": "tcp",
         "destination": "5e59e1240c78894d036cb403fa4e8012"
       }
     ]
@@ -121,8 +121,8 @@
       },
       {
         "description": "blah",
-        "ports": "",
-        "protocol": "all",
+        "ports": "443",
+        "protocol": "tcp",
         "destination": "5e59e1240c78894d036cb403fa4e8012"
       }
     ]
