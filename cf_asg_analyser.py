@@ -52,6 +52,49 @@ def look_for_common_org_rules(org_data):
 
   return org_common_saving, mod_org_data
 
+def look_for_shared_port_protocol(asg_data):
+  rules_to_be_collapsed = 0
+  # copy dict to return full modified copy
+  mod_asg_data = copy.deepcopy(asg_data)
+
+  # convert dict to list of keys to allow modification within the loop
+  for asg_idx in range(len(mod_asg_data)):
+    # build dict by port_protocol, with targets to deduplicate
+    collapse_targets = {}
+    for rule_idx in range(len(mod_asg_data[asg_idx]["rules"])):
+      if mod_asg_data[asg_idx]["asg_name"] == "default_security_group":
+        continue
+      port_proto = f"{mod_asg_data[asg_idx]['rules'][rule_idx]['ports']}_{mod_asg_data[asg_idx]['rules'][rule_idx]['protocol']}"
+      if port_proto not in collapse_targets:
+        collapse_targets[port_proto] = {
+          "idx": [rule_idx],
+          "destinations": [mod_asg_data[asg_idx]['rules'][rule_idx]['destination']]
+        }
+        continue
+      collapse_targets[port_proto]["idx"].append(rule_idx)
+      collapse_targets[port_proto]["destinations"].append(mod_asg_data[asg_idx]['rules'][rule_idx]['destination'])
+    
+    # remove duplicated destinations when port_protocol is common
+    for port_proto, destinations in collapse_targets.items():
+      if not len(destinations["idx"]) > 1:
+        continue
+
+      combined_list = []
+      for count, destination_idx in enumerate(reversed(destinations["idx"])):
+        del mod_asg_data[asg_idx]["rules"][destination_idx]
+        combined_list.append(destinations["destinations"][count])
+        rules_to_be_collapsed += 1
+    
+      # add combined rule back to mod_asg_data
+      rules_to_be_collapsed -= 1
+      mod_asg_data[asg_idx]["rules"].append({
+        "description": "combined rule",
+        "ports": f"{port_proto.split('_')[0]}",
+        "protocol": f"{port_proto.split('_')[1]}",
+        "destination": f"{'_'.join(combined_list)}"
+      })
+
+  return rules_to_be_collapsed, mod_asg_data
 
 def iterate_dict_value(lookup_dict, key):
   if not key in lookup_dict:

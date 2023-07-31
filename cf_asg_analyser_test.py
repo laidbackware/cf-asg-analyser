@@ -17,11 +17,6 @@ asg = {
     ]
   }
 
-# org_data = {
-#    "o1": {
-
-#    }
-# }
 
 with open(DUMMY_FILE, encoding="utf-8") as open_file:
   asg_data = json.load(open_file)
@@ -54,3 +49,7 @@ def test_look_for_common_org_rules():
   _, org_data = cfa.parse_asgs(asg_data)
   org_common_saving, mod_org_data = cfa.look_for_common_org_rules(org_data)
   assert org_common_saving == 4
+
+def test_look_for_shared_port_protocol():
+  rules_to_be_collapsed, mod_asg_data = cfa.look_for_shared_port_protocol(asg_data)
+  assert rules_to_be_collapsed == 5
