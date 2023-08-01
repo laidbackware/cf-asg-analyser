@@ -14,30 +14,53 @@ def main(file_name):
 
   covered_by_defaults, org_data = parse_asgs(asg_data)
 
-  org_common_saving, mod_org_data = look_for_common_org_rules(org_data)
+  org_common_saving, mod_org_data = look_for_common_org_rules(org_data, asg_data)
 
   rules_processed = 0
+  unassigned_asgs = 0
+  unassigned_asg_rules = 0
+  large_asgs = 0
+  largest_asg = 0
   for asg in asg_data:
     rules_processed += len(asg["rules"])
+    # TODO break into a function and return names of ASGs
+    if ( not asg["asg_name"] == "default_security_group" and 
+        not asg["spaces"]):
+      unassigned_asgs += 1
+      unassigned_asg_rules += len(asg["rules"])
+
+    if len(asg["rules"]) > 100:
+      large_asgs += 1
+      if len(asg["rules"]) > largest_asg:
+        largest_asg = len(asg["rules"])
+
+    if len(asg["spaces"]) > 1:
+      print(f"{asg['asg_name']}:= {'+'.join(asg['spaces'])}")
+
 
   common_asg_count = 0
   common_rule_count = 0
   for org_data in mod_org_data.values():
     if org_data["common_rules"]:
       common_asg_count += 1
-      common_rule_count += len(org_data["common_rules"])
+      common_rule_count += len(org_data["common_rules"])  
 
   print(f"Processed {len(asg_data)} ASGs")
   print(f"Processed {rules_processed} rules")
-  print(f"Number of rules covered by default ASG: {len(covered_by_defaults)}")
+  print(f"Number of unassigned ASGs: {unassigned_asgs}")
+  print(f"Number of rules in unassigned ASGs: {unassigned_asg_rules}")
+  print(f"Number of ASGs with more than 100 rules: {large_asgs}")
+  print(f"Number of rules in the largest asg: {largest_asg}")
+  print(f"Number of saved by using common ASGs: {len(covered_by_defaults)}")
   print(f"Number of rules that could be covered by common org ASG: {org_common_saving}")
   print(f"Number of common ASGs to be created: {common_asg_count}")
   print(f"Number of common rules within common ASGs to be created: {common_rule_count}")
 
-def look_for_common_org_rules(org_data):
+def look_for_common_org_rules(org_data, asg_data):
   org_common_saving = 0
   # copy dict to return full modified copy
   mod_org_data = copy.deepcopy(org_data)
+  mod_asg_data = copy.deepcopy(asg_data)
 
   # convert dict to list of keys to allow modification within the loop
   for org_name in list(org_data):
@@ -75,13 +98,15 @@ def look_for_shared_port_protocol(asg_data):
       collapse_targets[port_proto]["destinations"].append(mod_asg_data[asg_idx]['rules'][rule_idx]['destination'])
     
     # remove duplicated destinations when port_protocol is common
+    idx_to_delete = []
     for port_proto, destinations in collapse_targets.items():
-      if not len(destinations["idx"]) > 1:
+      if len(destinations["idx"]) < 2:
         continue
 
       combined_list = []
-      for count, destination_idx in enumerate(reversed(destinations["idx"])):
-        del mod_asg_data[asg_idx]["rules"][destination_idx]
+      for count, destination_idx in enumerate(destinations["idx"]):
+        
+        idx_to_delete.append(destination_idx)
         combined_list.append(destinations["destinations"][count])
         rules_to_be_collapsed += 1
     
@@ -93,6 +118,9 @@ def look_for_shared_port_protocol(asg_data):
         "protocol": f"{port_proto.split('_')[1]}",
         "destination": f"{'_'.join(combined_list)}"
       })
+    
+    for del_idx in sorted(idx_to_delete, reverse=True):
+      del mod_asg_data[asg_idx]["rules"][del_idx]
 
   return rules_to_be_collapsed, mod_asg_data
 
