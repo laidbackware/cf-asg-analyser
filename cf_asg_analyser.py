@@ -8,75 +8,241 @@ def get_rule_string_list(rules):
   return rule_list
 
 def main(file_name):
+  # Tests
+  # [x] destination is covered by the default ASG
+  # [x] destination appears all spaces in the same org
+  # [x] check for rules that could be combined due to a shared target and protocol
+  # [ ] destination is mapped to same space via another ASG
+  # [ ] check for duplicate rules inside an ASG
+  # [ ] asg is applied to to many spaces for NSX-T
   '''Main function'''
   with open(file_name, encoding="utf-8") as open_file:
     asg_data = json.load(open_file)
 
-  covered_by_defaults, org_data = parse_asgs(asg_data)
 
-  org_common_saving, mod_org_data = look_for_common_org_rules(org_data, asg_data)
+  source_large_asgs, source_largest_asg = find_large_asgs(asg_data)
 
-  rules_processed = 0
-  unassigned_asgs = 0
-  unassigned_asg_rules = 0
-  large_asgs = 0
-  largest_asg = 0
-  for asg in asg_data:
-    rules_processed += len(asg["rules"])
-    # TODO break into a function and return names of ASGs
-    if ( not asg["asg_name"] == "default_security_group" and 
-        not asg["spaces"]):
-      unassigned_asgs += 1
-      unassigned_asg_rules += len(asg["rules"])
+  covered_by_defaults, mod_asg_data = check_default_coverage(asg_data)
 
-    if len(asg["rules"]) > 100:
-      large_asgs += 1
-      if len(asg["rules"]) > largest_asg:
-        largest_asg = len(asg["rules"])
+  unbound_asgs, unbound_asg_rules, mod_asg_data = remove_unbound_asgs(mod_asg_data)
 
-    if len(asg["spaces"]) > 1:
-      print(f"{asg['asg_name']}:= {'+'.join(asg['spaces'])}")
-
+  org_common_saving, mod_org_data, mod_asg_data = combine_rules_per_org(mod_asg_data)
 
   common_asg_count = 0
   common_rule_count = 0
-  for org_data in mod_org_data.values():
-    if org_data["common_rules"]:
+  for org in mod_org_data.values():
+    if org["common_rules"]:
       common_asg_count += 1
-      common_rule_count += len(org_data["common_rules"])  
+      common_rule_count += len(org["common_rules"])
 
-  print(f"Processed {len(asg_data)} ASGs")
-  print(f"Processed {rules_processed} rules")
-  print(f"Number of unassigned ASGs: {unassigned_asgs}")
-  print(f"Number of rules in unassigned ASGs: {unassigned_asg_rules}")
-  print(f"Number of ASGs with more than 100 rules: {large_asgs}")
-  print(f"Number of rules in the largest asg: {largest_asg}")
-  print(f"Number of saved by using common ASGs: {len(covered_by_defaults)}")
+  collapsed_rules_saving, mod_asg_data = collapse_shared_port_protocol(mod_asg_data)
+
+  target_large_asgs, target_largest_asg = find_large_asgs(mod_asg_data)
+
+  print("------------Source data-------------")
+  print(f"Source number of ASGs: {len(asg_data)}")
+  print(f"Source number of rules {count_rules(asg_data)}")
+  print(f"Source number of unbound ASGs: {unbound_asgs}")
+  print(f"Source number of rules in unbound ASGs: {unbound_asg_rules}")
+  print(f"Source number of ASGs with more than 100 rules: {source_large_asgs}")
+  print(f"Source number of rules in the largest asg: {source_largest_asg}")
+  print(f"Number rules covered by the default ASG: {len(covered_by_defaults)}")
+  print("------------------------------------")
+  print("----------Large ASGs----------------")
+  print("------------------------------------")
+  print("----------Per Org ASG---------------")
   print(f"Number of rules that could be covered by common org ASG: {org_common_saving}")
   print(f"Number of common ASGs to be created: {common_asg_count}")
   print(f"Number of common rules within common ASGs to be created: {common_rule_count}")
+  print("------------------------------------")
+  print("----------Destination lists---------")
+  print(f"Number of rules to be saved be destination lists: {collapsed_rules_saving}")
 
-def look_for_common_org_rules(org_data, asg_data):
-  org_common_saving = 0
+  print("------------------------------------")
+  print("----------Final rule count----------")
+  print(f"Target number of ASGs: {len(mod_asg_data)}")
+  print(f"Target number of rules: {count_rules(mod_asg_data)}")
+  print(f"Target number of ASGs with more than 100 rules: {target_large_asgs}")
+  print(f"Target number of rules in the largest asg: {target_largest_asg}")
+  print("------------------------------------")
+
+
+def combine_rules_per_org(asg_data):
   # copy dict to return full modified copy
-  mod_org_data = copy.deepcopy(org_data)
   mod_asg_data = copy.deepcopy(asg_data)
+  org_data = extract_org_data(asg_data)
 
+  for asg_idx, asg in enumerate(asg_data):
+    if asg["asg_name"] == "default_security_group" or not "_" in asg["asg_name"] or len(asg["spaces"]) > 1:
+      continue
+
+    for rule_idx, rule in enumerate(asg["rules"]):
+      rule_string = f"{rule['destination']}_{rule['protocol']}_{rule['ports']}"
+      assign_rule_org_mapping(org_data, asg, rule_string, rule_idx, asg_idx)
+  
+  org_common_saving = 0
+  rules_to_delete = []
   # convert dict to list of keys to allow modification within the loop
   for org_name in list(org_data):
-    if mod_org_data[org_name]["space_count"] < 2 or mod_org_data[org_name]["asgs"] < 2:
+    new_rules = []
+    if org_data[org_name]["space_count"] < 2 or org_data[org_name]["asgs"] < 2:
       continue
-    for rule_key in list(mod_org_data[org_name]["rules"]):
-      if len(mod_org_data[org_name]["rules"][rule_key]) == mod_org_data[org_name]["space_count"]:
-        mod_org_data[org_name]["org_common_saving"] += mod_org_data[org_name]["space_count"] - 1
-        org_common_saving += mod_org_data[org_name]["space_count"] - 1
-        del mod_org_data[org_name]["rules"][rule_key]
-        mod_org_data[org_name]["common_rules"].add(rule_key)
+    for rule_key in list(org_data[org_name]["rules"]):
+      if len(org_data[org_name]["rules"][rule_key]["space_names"]) == org_data[org_name]["space_count"]:
+        rules_to_delete.append(org_data[org_name]["rules"][rule_key]["asg_rule_mapping"])
 
-  return org_common_saving, mod_org_data
+        # select first entry for each rule, as rule will copied from source ASG
+        asg_idx = list(org_data[org_name]["rules"][rule_key]["asg_rule_mapping"])[0]
+        rule_idx = list(org_data[org_name]["rules"][rule_key]["asg_rule_mapping"][asg_idx])[0]
+        new_rules.append(asg_data[asg_idx]["rules"][rule_idx])
 
-def look_for_shared_port_protocol(asg_data):
-  rules_to_be_collapsed = 0
+        org_data[org_name]["org_common_saving"] += org_data[org_name]["space_count"] - 1
+        org_common_saving += org_data[org_name]["space_count"] - 1
+        del org_data[org_name]["rules"][rule_key]
+        org_data[org_name]["common_rules"].add(rule_key)
+
+    add_asg(mod_asg_data, new_rules, f"{org_name}_org_common")
+
+  merged_rules_to_delete = {}
+  for asg_rule_mapping in rules_to_delete:
+    for asg_idx, rule_idx_set in asg_rule_mapping.items():
+      if asg_idx not in merged_rules_to_delete:
+        merged_rules_to_delete[asg_idx] = rule_idx_set
+        continue
+      merged_rules_to_delete[asg_idx].update(rule_idx_set)
+
+  for asg_idx, rule_indexes in merged_rules_to_delete.items():
+    for rule_idx in sorted(rule_indexes, reverse=True):
+      del mod_asg_data[asg_idx]["rules"][rule_idx]
+
+  return org_common_saving, org_data, mod_asg_data
+
+def add_asg(asg_data, rules, asg_name):
+  if not rules:
+    return
+  
+  asg_data.append({
+    "asg_name": asg_name,
+    "spaces": "all_spaces",
+    "rules": rules
+  })
+
+def assign_rule_org_mapping(org_data, asg, rule_string, rule_idx, asg_idx):
+  
+  for org_space_name  in asg["spaces"]:
+    org_name, space_name = org_space_name.split("_")[0], "_".join(org_space_name.split("_")[1:])
+
+    if rule_string not in  org_data[org_name]["rules"]:
+      org_data[org_name]["rules"][rule_string] = {
+        "space_names": {space_name},
+        "asg_rule_mapping": {asg_idx: {rule_idx}},
+      }
+      continue
+    org_data[org_name]["rules"][rule_string]["space_names"].add(space_name)
+    # org_data[org_name]["rules"][rule_string][asg["asg_name"]]["rule_idx"] = rule_idx
+    if asg_idx not in org_data[org_name]["rules"][rule_string]["asg_rule_mapping"]:
+      org_data[org_name]["rules"][rule_string]["asg_rule_mapping"][asg_idx] = {rule_idx}
+      continue
+    org_data[org_name]["rules"][rule_string]["asg_rule_mapping"][asg_idx].add(rule_idx)
+
+def extract_org_data(asg_data):
+  '''Returns a dict, with org name as key and space_count/spaces as subkeys '''
+  org_data = {}
+  for asg in asg_data:
+    added_orgs = set()
+    for org_space_joined in asg["spaces"]:
+      org_name, space_name = org_space_joined.split("_")[0], "_".join(org_space_joined.split("_")[1:])
+      if not org_name in org_data:
+        org_data[org_name] = {
+          "space_count": 1,
+          "org_common_saving": 0,
+          "asgs": 0,
+          "spaces": {space_name},
+          "rules": {},
+          "common_rules": set()
+        }
+      elif not space_name in org_data[org_name]["spaces"]:
+          org_data[org_name]["space_count"] = org_data[org_name]["space_count"] + 1
+          org_data[org_name]["spaces"].add(space_name)
+      
+      added_orgs.add(org_name)
+  
+    for added_org_name in added_orgs:
+      org_data[added_org_name]["asgs"] += 1
+  return org_data
+
+def iterate_dict_value(lookup_dict, key):
+  if not key in lookup_dict:
+    lookup_dict[key] = 1
+    return
+  lookup_dict[key] = lookup_dict[key] + 1
+
+def count_rules(asg_data):
+  rule_count = 0
+  for asg in asg_data:
+    rule_count += len(asg["rules"])
+  return rule_count
+
+def find_large_asgs(asg_data):
+  # TODO return the details!
+  large_asgs = 0
+  largest_asg = 0
+  for asg in asg_data:
+    if len(asg["rules"]) > largest_asg:
+      largest_asg = len(asg["rules"])
+    if len(asg["rules"]) > 100:
+      large_asgs += 1
+
+    # # TODO move somewhere else!
+    # if len(asg["spaces"]) > 1:
+    #   print(f"{asg['asg_name']}:= {'+'.join(asg['spaces'])}")
+
+  return large_asgs, largest_asg
+
+def remove_unbound_asgs(asg_data):
+  mod_asg_data = copy.deepcopy(asg_data)
+  unbound_asgs = 0
+  unbound_asg_rules = 0
+  idx_to_delete = []
+  for asg_idx, asg in enumerate(asg_data):
+    if asg["asg_name"] == "default_security_group":
+      continue
+    # TODO break into a function and return names of ASGs
+    if ( not asg["asg_name"] == "default_security_group" and 
+        not asg["spaces"]):
+      idx_to_delete.append(asg_idx)
+      unbound_asgs += 1
+      unbound_asg_rules += len(asg["rules"])
+  
+  for del_asg_idx in sorted(idx_to_delete, reverse=True):
+      del mod_asg_data[del_asg_idx]
+
+  return unbound_asgs, unbound_asg_rules, mod_asg_data 
+
+def check_default_coverage(asg_data):
+  mod_asg_data = copy.deepcopy(asg_data)
+  default_rules = get_rule_string_list(asg_data[0]["rules"])
+  covered_by_defaults = []
+
+  for asg_idx, asg in enumerate(asg_data):
+    if asg["asg_name"] == "default_security_group":
+      continue
+    
+    idx_to_delete = []
+    for rule_idx, rule in enumerate(asg["rules"]):
+      rule_string = f"{rule['destination']}_{rule['protocol']}_{rule['ports']}"
+
+      if rule_string in default_rules:
+        covered_by_defaults.append(rule.update({"org_space": asg["spaces"], "asg_name": asg["asg_name"]}))
+        idx_to_delete.append(rule_idx)
+    
+    for del_rule_idx in sorted(idx_to_delete, reverse=True):
+      del mod_asg_data[asg_idx]["rules"][del_rule_idx]
+  
+  return covered_by_defaults, mod_asg_data
+
+def collapse_shared_port_protocol(asg_data):
+  collapsed_rules_saving = 0
   # copy dict to return full modified copy
   mod_asg_data = copy.deepcopy(asg_data)
 
@@ -108,10 +274,10 @@ def look_for_shared_port_protocol(asg_data):
         
         idx_to_delete.append(destination_idx)
         combined_list.append(destinations["destinations"][count])
-        rules_to_be_collapsed += 1
+        collapsed_rules_saving += 1
     
       # add combined rule back to mod_asg_data
-      rules_to_be_collapsed -= 1
+      collapsed_rules_saving -= 1
       mod_asg_data[asg_idx]["rules"].append({
         "description": "combined rule",
         "ports": f"{port_proto.split('_')[0]}",
@@ -122,78 +288,7 @@ def look_for_shared_port_protocol(asg_data):
     for del_idx in sorted(idx_to_delete, reverse=True):
       del mod_asg_data[asg_idx]["rules"][del_idx]
 
-  return rules_to_be_collapsed, mod_asg_data
-
-def iterate_dict_value(lookup_dict, key):
-  if not key in lookup_dict:
-    lookup_dict[key] = 1
-    return
-  lookup_dict[key] = lookup_dict[key] + 1
-
-def extract_org_data(asg_data):
-  '''Returns a dict, with org name as key and space_count/spaces as subkeys '''
-  org_data = {}
-  for asg in asg_data:
-    added_orgs = set()
-    for org_space_joined in asg["spaces"]:
-      org_name, space_name = org_space_joined.split("_")[0], "_".join(org_space_joined.split("_")[1:])
-      if not org_name in org_data:
-        org_data[org_name] = {
-          "space_count": 1,
-          "org_common_saving": 0,
-          "asgs": 0,
-          "spaces": {space_name},
-          "rules": {},
-          "common_rules": set()
-        }
-      elif not space_name in org_data[org_name]["spaces"]:
-          org_data[org_name]["space_count"] = org_data[org_name]["space_count"] + 1
-          org_data[org_name]["spaces"].add(space_name)
-      
-      added_orgs.add(org_name)
-  
-    for added_org_name in added_orgs:
-      org_data[added_org_name]["asgs"] += 1
-  return org_data
-
-def assign_rule_org_mapping(org_data, asg, rule_string):
-  
-  for org_space_name  in asg["spaces"]:
-    org_name, space_name = org_space_name.split("_")[0], "_".join(org_space_name.split("_")[1:])
-
-    if rule_string not in  org_data[org_name]["rules"]:
-      org_data[org_name]["rules"][rule_string] = {space_name}
-    else:
-      org_data[org_name]["rules"][rule_string].add(space_name)
-
-
-def parse_asgs(asg_data):
-  # Tests
-  # [x] destination is covered by the default ASG
-  # [x] destination appears all spaces in the same org
-  # [ ] destination is mapped to same space via another ASG
-  # [ ] destination appears in a large number of orgs
-  # [ ] check for duplicate rules inside an ASG
-  # [ ] check for rules that could be combined due to a shared target and protocol
-  # [ ] asg is applied to to many spaces for NSX-T
-
-  default_rules = get_rule_string_list(asg_data[0]["rules"])
-  org_data = extract_org_data(asg_data)
-  covered_by_defaults = []
-
-  for asg in asg_data:
-    # Skip default ASG
-    if asg["asg_name"] == "default_security_group" or "" not in asg["asg_name"]:
-      continue
-
-    for rule in asg["rules"]:
-      rule_string = f"{rule['destination']}_{rule['protocol']}_{rule['ports']}"
-
-      if rule_string in default_rules:
-        covered_by_defaults.append(rule.update({"org_space": asg["spaces"], "asg_name": asg["asg_name"]}))
-
-      assign_rule_org_mapping(org_data, asg, rule_string)
-  return covered_by_defaults, org_data
+  return collapsed_rules_saving, mod_asg_data
 
 if __name__ == "__main__":
   # TODO test for user input!!!
