@@ -1,4 +1,4 @@
-# cf-asg-extractor
+# cf-asg-analyser
 
 Extract ASG details from a running CF install via the v3 API.
 
@@ -26,6 +26,36 @@ Written file: /home/user/cf-asg-munger/output.json
 ```
 
 A file called output.json will be created in the script directory.
+
+Run the analyser against the output file;
+
+```
+------------Source data-------------
+Source number of ASGs: 7
+Source number of rules 19
+Source number of unbound ASGs: 1
+Source number of rules in unbound ASGs: 2
+Source number of ASGs with more than 100 rules: 0
+Source number of rules in the largest asg: 4
+Number rules covered by the default ASG: 1
+------------------------------------
+----------Large ASGs----------------
+------------------------------------
+----------Per Org ASG---------------
+Number of rules that could be covered by common org ASG: 4
+Number of common ASGs to be created: 1
+Number of common rules within common ASGs to be created: 2
+------------------------------------
+----------Destination lists---------
+Number of rules to be saved be destination lists: 1
+------------------------------------
+----------Final rule count----------
+Target number of ASGs: 7
+Target number of rules: 11
+Target number of ASGs with more than 100 rules: 0
+Target number of rules in the largest asg: 2
+------------------------------------
+```
 
 ## Build with older Python version
 Export Docker hub tag for python version `export PYTHON_VERSION=3.7.3-stretch`.
