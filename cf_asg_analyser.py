@@ -27,6 +27,7 @@ def main(file_name):
   unbound_asgs, unbound_asg_rules, mod_asg_data = remove_unbound_asgs(mod_asg_data)
 
   org_common_saving, mod_org_data, mod_asg_data = combine_rules_per_org(mod_asg_data)
+  number_post_combine_rules =  count_rules(mod_asg_data)
 
   common_asg_count = 0
   common_rule_count = 0
@@ -44,19 +45,21 @@ def main(file_name):
   print(f"Source number of rules {count_rules(asg_data)}")
   print(f"Source number of unbound ASGs: {unbound_asgs}")
   print(f"Source number of rules in unbound ASGs: {unbound_asg_rules}")
-  print(f"Source number of ASGs with more than 100 rules: {source_large_asgs}")
-  print(f"Source number of rules in the largest asg: {source_largest_asg}")
   print(f"Number rules covered by the default ASG: {len(covered_by_defaults)}")
   print("------------------------------------")
   print("----------Large ASGs----------------")
+  print(f"Source number of ASGs with more than 100 rules: {source_large_asgs}")
+  print(f"Source number of rules in the largest asg: {source_largest_asg}")
   print("------------------------------------")
   print("----------Per Org ASG---------------")
-  print(f"Number of rules that could be covered by common org ASG: {org_common_saving}")
+  print(f"Number of rules that could be saved by common org ASG: {org_common_saving}")
   print(f"Number of common ASGs to be created: {common_asg_count}")
   print(f"Number of common rules within common ASGs to be created: {common_rule_count}")
+  print(f"Number of rules after per org optimisation: {number_post_combine_rules}")
   print("------------------------------------")
   print("----------Destination lists---------")
   print(f"Number of rules to be saved be destination lists: {collapsed_rules_saving}")
+  print(f"Number of rules after destinations combined: {count_rules(mod_asg_data)}")
 
   print("------------------------------------")
   print("----------Final rule count----------")
