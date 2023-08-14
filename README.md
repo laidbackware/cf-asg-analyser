@@ -57,7 +57,19 @@ Target number of rules in the largest asg: 2
 ------------------------------------
 ```
 
-## Build with older Python version
+## Development
+
+### Testing
+Requires `pytest`, installed via `pip install pytest`.
+
+Run `pytest` from the root of the repo.
+
+### Build
+The extractor can be built to a single executable. Requires `pyinstaller`. Instructions cover Linux, but `pyinstaller` is multiplatform.
+
+Run with `pyinstaller cf_asg_extracter.spec`
+
+### Build with older Python version
 Export Docker hub tag for python version `export PYTHON_VERSION=3.7.3-stretch`.
 
 ```

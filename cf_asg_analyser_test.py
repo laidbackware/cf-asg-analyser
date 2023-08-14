@@ -21,7 +21,7 @@ asg = {
 
 with open(DUMMY_FILE, encoding="utf-8") as open_file:
   asg_data = json.load(open_file)
-  print(asg_data)
+  # print(asg_data)
 
 def test_e2e():
   cfa.main(DUMMY_FILE)
@@ -42,15 +42,16 @@ def test_check_default_coverage():
   assert len(mod_asg_data[3]["rules"]) == 3
 
 def test_remove_unbound_asgs():
-  unbound_asgs, unbound_asg_rules, mod_asg_data = cfa.remove_unbound_asgs(asg_data)
+  unbound_asgs, unbound_asg_rules, mod_asg_data, unbound_asg_list = cfa.remove_unbound_asgs(asg_data)
 
   assert unbound_asgs == 1, "Detected too many rules covered by default"
-  assert unbound_asg_rules == 2, "Detected too many rules covered by default"
+  assert unbound_asg_rules == 3, "Detected too many rules covered by default"
   assert len(mod_asg_data) == 6
+  assert len(unbound_asg_list) == 1 and unbound_asg_list[0] == "sg_-unbound"
 
 def test_find_large_asgs():
-  large_asgs, largest_asg = cfa.find_large_asgs(asg_data)
-  assert large_asgs == 0 and largest_asg == 0
+  large_asgs, largest_asg, org_common_asgs = cfa.find_large_asgs(asg_data)
+  assert large_asgs == 0 and largest_asg == 4
 
 def test_extract_org_data():
   org_data = cfa.extract_org_data(asg_data)
@@ -64,16 +65,16 @@ def test_assign_rule_org_mapping():
     "o3": {"rules": {}, "asgs": 0},
     "o4": {"rules": {}, "asgs": 0}
   }
-  cfa.assign_rule_org_mapping(org_data, asg_data[5], f"{rule_string}_1")
-  cfa.assign_rule_org_mapping(org_data, asg_data[5], f"{rule_string}_2")
+  cfa.assign_rule_org_mapping(org_data, asg_data[5], f"{rule_string}_1", 0, 0)
+  cfa.assign_rule_org_mapping(org_data, asg_data[5], f"{rule_string}_2", 1, 0)
 
   assert len(org_data["o3"]["rules"]) == 2
 
-# def test_look_for_common_org_rules():
-#   org_data = cfa.combine_rules_per_org(asg_data)
-#   org_common_saving, mod_org_data, mod_asg_data = cfa.look_for_common_org_rules(org_data, asg_data)
-#   assert org_common_saving == 4
-
 def test_collapse_shared_port_protocol():
   rules_to_be_collapsed, mod_asg_data = cfa.collapse_shared_port_protocol(asg_data)
-  assert rules_to_be_collapsed == 5
+  assert rules_to_be_collapsed == 6
+
+def test_check_for_duplicate_rules():
+  duplicate_rule_count, asgs_with_duplicates_formatted, mod_asg_data = cfa.remove_for_duplicate_rules(asg_data)
+  assert duplicate_rule_count == 1
+  assert len(mod_asg_data[6]["rules"]) == 2

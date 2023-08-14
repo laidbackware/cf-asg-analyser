@@ -19,12 +19,16 @@ def main(file_name):
   with open(file_name, encoding="utf-8") as open_file:
     asg_data = json.load(open_file)
 
+  source_large_asgs, source_largest_asg, source_org_common_asgs = find_large_asgs(asg_data, True)
 
-  source_large_asgs, source_largest_asg = find_large_asgs(asg_data)
+  duplicate_rule_count, asgs_with_duplicates_formatted, mod_asg_data = remove_for_duplicate_rules(asg_data)
 
-  covered_by_defaults, mod_asg_data = check_default_coverage(asg_data)
+  covered_by_defaults, mod_asg_data = check_default_coverage(mod_asg_data)
 
-  unbound_asgs, unbound_asg_rules, mod_asg_data = remove_unbound_asgs(mod_asg_data)
+  unbound_asg_count, unbound_asg_rules, mod_asg_data, unbound_asg_list = remove_unbound_asgs(mod_asg_data)
+  
+  # Take count before further mutating asg_data
+  removed_duplicates_unbound = count_rules(mod_asg_data)
 
   org_common_saving, mod_org_data, mod_asg_data = combine_rules_per_org(mod_asg_data)
   number_post_combine_rules =  count_rules(mod_asg_data)
@@ -38,14 +42,16 @@ def main(file_name):
 
   collapsed_rules_saving, mod_asg_data = collapse_shared_port_protocol(mod_asg_data)
 
-  target_large_asgs, target_largest_asg = find_large_asgs(mod_asg_data)
+  target_large_asgs, target_largest_asg, _ = find_large_asgs(mod_asg_data)
 
   print("------------Source data-------------")
   print(f"Source number of ASGs: {len(asg_data)}")
   print(f"Source number of rules {count_rules(asg_data)}")
-  print(f"Source number of unbound ASGs: {unbound_asgs}")
+  print(f"Source number of duplicate rules within ASGs: {duplicate_rule_count}")
+  print(f"Source number of unbound ASGs: {unbound_asg_count}")
   print(f"Source number of rules in unbound ASGs: {unbound_asg_rules}")
   print(f"Number rules covered by the default ASG: {len(covered_by_defaults)}")
+  print(f"Removed duplicate rules, unbound ASGs and default duplication takes rules to: {removed_duplicates_unbound}")
   print("------------------------------------")
   print("----------Large ASGs----------------")
   print(f"Source number of ASGs with more than 100 rules: {source_large_asgs}")
@@ -68,7 +74,46 @@ def main(file_name):
   print(f"Target number of ASGs with more than 100 rules: {target_large_asgs}")
   print(f"Target number of rules in the largest asg: {target_largest_asg}")
   print("------------------------------------")
+  print("----------Additional data-----------")
+  print(f"Source list of unbound ASGs: {', '.join(unbound_asg_list)}")
+  print(f"Source list of ASGs bound to multiple spaces: {', '.join(source_org_common_asgs)}")
+  print(f"Source list of ASGs that have duplicated rules with quantity: {', '.join(asgs_with_duplicates_formatted)}")
+  print("------------------------------------")
 
+def remove_for_duplicate_rules(asg_data):
+  # copy dict to return full modified copy
+  mod_asg_data = copy.deepcopy(asg_data)
+  duplicate_rule_count = 0
+  asgs_with_duplicates = {}
+  all_rules_to_delete = {}
+  for asg_idx, asg in enumerate(asg_data):
+    asg_rules = []
+    asg_delete_rules = []
+    for rule_idx, rule in enumerate(asg["rules"]):
+      rule_string = f"{rule['destination']}_{rule['protocol']}_{rule['ports']}"
+      if rule_string in asg_rules:
+        asg_delete_rules.append(rule_idx)
+        duplicate_rule_count += 1
+        if asg["asg_name"] not in asgs_with_duplicates:
+          asgs_with_duplicates[asg["asg_name"]] = 1
+        else:
+          asgs_with_duplicates[asg["asg_name"]] += 1
+      asg_rules.append(rule_string)
+    if asg_delete_rules:
+      all_rules_to_delete[asg_idx] = asg_delete_rules
+  
+  # delete rules in reverse by index
+  for asg_idx in sorted(all_rules_to_delete, reverse=True):
+    for rule_idx in reversed(all_rules_to_delete[asg_idx]):
+      del mod_asg_data[asg_idx]["rules"][rule_idx]
+
+  
+  # refactor data into list with <asg_name>-(<num of duplicates>)
+  asgs_with_duplicates_formatted = []
+  for key in sorted(asgs_with_duplicates):
+    asgs_with_duplicates_formatted.append(f"{key}-({asgs_with_duplicates[key]})")
+
+  return duplicate_rule_count, asgs_with_duplicates_formatted, mod_asg_data
 
 def combine_rules_per_org(asg_data):
   # copy dict to return full modified copy
@@ -186,27 +231,28 @@ def count_rules(asg_data):
     rule_count += len(asg["rules"])
   return rule_count
 
-def find_large_asgs(asg_data):
-  # TODO return the details!
+def find_large_asgs(asg_data, check_common=False):
   large_asgs = 0
   largest_asg = 0
+  org_common_asgs = []
   for asg in asg_data:
     if len(asg["rules"]) > largest_asg:
       largest_asg = len(asg["rules"])
     if len(asg["rules"]) > 100:
       large_asgs += 1
 
-    # # TODO move somewhere else!
-    # if len(asg["spaces"]) > 1:
-    #   print(f"{asg['asg_name']}:= {'+'.join(asg['spaces'])}")
+    # TODO move somewhere else!
+    if check_common and len(asg["spaces"]) > 1 and "_org_common" not in asg["asg_name"]:
+      org_common_asgs.append(asg['asg_name'])
 
-  return large_asgs, largest_asg
+  return large_asgs, largest_asg, org_common_asgs
 
-def remove_unbound_asgs(asg_data):
+def remove_unbound_asgs(asg_data, ):
   mod_asg_data = copy.deepcopy(asg_data)
-  unbound_asgs = 0
+  unbound_asg_count = 0
   unbound_asg_rules = 0
   idx_to_delete = []
+  unbound_asgs = []
   for asg_idx, asg in enumerate(asg_data):
     if asg["asg_name"] == "default_security_group":
       continue
@@ -214,13 +260,14 @@ def remove_unbound_asgs(asg_data):
     if ( not asg["asg_name"] == "default_security_group" and 
         not asg["spaces"]):
       idx_to_delete.append(asg_idx)
-      unbound_asgs += 1
+      unbound_asg_count += 1
       unbound_asg_rules += len(asg["rules"])
+      unbound_asgs.append(asg["asg_name"])
   
   for del_asg_idx in sorted(idx_to_delete, reverse=True):
       del mod_asg_data[del_asg_idx]
 
-  return unbound_asgs, unbound_asg_rules, mod_asg_data 
+  return unbound_asg_count, unbound_asg_rules, mod_asg_data, unbound_asgs
 
 def check_default_coverage(asg_data):
   mod_asg_data = copy.deepcopy(asg_data)

@@ -165,6 +165,12 @@
         "ports": "443",
         "protocol": "tcp",
         "destination": "3627b078935fd27c44668c381e9abfa2"
+      },
+      {
+        "description": "Allow http and https traffic from ZoneA",
+        "ports": "443",
+        "protocol": "tcp",
+        "destination": "3627b078935fd27c44668c381e9abfa2"
       }
     ]
   }
