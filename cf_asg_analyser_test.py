@@ -7,7 +7,7 @@ import cf_asg_analyser as cfa
 base_dir = os.path.dirname(os.path.realpath(__file__))
 
 DUMMY_FILE = os.path.join(base_dir, "test", "dummy.json")
-DUMMY_FILE = os.path.join(base_dir, "ignored", "nwg-dev01.json")
+# DUMMY_FILE = os.path.join(base_dir, "ignored", "nwg-dev01.json")
 
 asg = {
     "spaces": [
@@ -73,6 +73,10 @@ def test_assign_rule_org_mapping():
 def test_collapse_shared_port_protocol():
   rules_to_be_collapsed, mod_asg_data = cfa.collapse_shared_port_protocol(asg_data)
   assert rules_to_be_collapsed == 6
+
+def test_collapse_shared_port():
+  rules_to_be_collapsed, mod_asg_data = cfa.collapse_shared_port(asg_data)
+  assert rules_to_be_collapsed == 7
 
 def test_check_for_duplicate_rules():
   duplicate_rule_count, asgs_with_duplicates_formatted, mod_asg_data = cfa.remove_for_duplicate_rules(asg_data)

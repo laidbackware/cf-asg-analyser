@@ -29,6 +29,9 @@ def main(file_name):
   
   # Take count before further mutating asg_data
   removed_duplicates_unbound = count_rules(mod_asg_data)
+  
+  collapsed_ports_saving, mod_asg_data = collapse_shared_port(mod_asg_data)
+  collapsed_ports_saving_rules = count_rules(mod_asg_data)
 
   org_common_saving, mod_org_data, mod_asg_data = combine_rules_per_org(mod_asg_data)
   number_post_combine_rules =  count_rules(mod_asg_data)
@@ -56,6 +59,11 @@ def main(file_name):
   print("----------Large ASGs----------------")
   print(f"Source number of ASGs with more than 100 rules: {source_large_asgs}")
   print(f"Source number of rules in the largest asg: {source_largest_asg}")
+  print("------------------------------------")
+  print("----------Combined Ports Saving-----")
+  print(f"Number of rules to be saved be destination lists: {collapsed_ports_saving}")
+  print(f"Number of rules after destinations combined: {collapsed_ports_saving_rules}")
+
   print("------------------------------------")
   print("----------Per Org ASG---------------")
   print(f"Number of rules that could be saved by common org ASG: {org_common_saving}")
@@ -290,6 +298,55 @@ def check_default_coverage(asg_data):
       del mod_asg_data[asg_idx]["rules"][del_rule_idx]
   
   return covered_by_defaults, mod_asg_data
+
+def collapse_shared_port(asg_data):
+  collapsed_rules_saving = 0
+  # copy dict to return full modified copy
+  mod_asg_data = copy.deepcopy(asg_data)
+
+  # convert dict to list of keys to allow modification within the loop
+  for asg_idx in range(len(mod_asg_data)):
+    # build dict by port_protocol, with targets to deduplicate
+    collapse_targets = {}
+    for rule_idx in range(len(mod_asg_data[asg_idx]["rules"])):
+      if mod_asg_data[asg_idx]["asg_name"] == "default_security_group":
+        continue
+      destination_proto = f"{mod_asg_data[asg_idx]['rules'][rule_idx]['destination']}_{mod_asg_data[asg_idx]['rules'][rule_idx]['protocol']}"
+      if destination_proto not in collapse_targets:
+        collapse_targets[destination_proto] = {
+          "idx": [rule_idx],
+          "ports": [mod_asg_data[asg_idx]['rules'][rule_idx]['ports']]
+        }
+        continue
+      collapse_targets[destination_proto]["idx"].append(rule_idx)
+      collapse_targets[destination_proto]["ports"].append(mod_asg_data[asg_idx]['rules'][rule_idx]['ports'])
+    
+    # remove duplicated destinations when port_protocol is common
+    idx_to_delete = []
+    for destination_proto, collapse_target in collapse_targets.items():
+      if len(collapse_target["idx"]) < 2:
+        continue
+
+      combined_list = []
+      for count, destination_idx in enumerate(collapse_target["idx"]):
+        
+        idx_to_delete.append(destination_idx)
+        combined_list.append(collapse_target["ports"][count])
+        collapsed_rules_saving += 1
+    
+      # add combined rule back to mod_asg_data
+      collapsed_rules_saving -= 1
+      mod_asg_data[asg_idx]["rules"].append({
+        "description": "combined ports rule",
+        "ports": f"{','.join(combined_list)}",
+        "protocol": f"{destination_proto.split('_')[1]}",
+        "destination": f"{destination_proto.split('_')[0]}",
+      })
+    
+    for del_idx in sorted(idx_to_delete, reverse=True):
+      del mod_asg_data[asg_idx]["rules"][del_idx]
+
+  return collapsed_rules_saving, mod_asg_data
 
 def collapse_shared_port_protocol(asg_data):
   collapsed_rules_saving = 0
